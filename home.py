@@ -5,27 +5,6 @@ import math
 
 st.set_page_config(page_title="SHINE Search Engine", layout="wide")
 
-# # --- CUSTOM CSS ---
-# st.markdown("""
-#     <style>
-#     div.stButton > button {
-#         background-color: #333333;
-#         color: white;
-#         border: none;
-#         width: 100%;
-#         border-radius: 2px;
-#     }
-#     div.stButton > button:hover {
-#         background-color: #555555;
-#         color: white;
-#     }
-#     .block-container {
-#         border: 1px solid #cccccc;
-#         padding: 2rem !important;
-#         margin-top: 2rem;
-#     }
-#     </style>
-# """, unsafe_allow_html=True)
 
 # --- STATE MANAGEMENT (Crucial for Pagination) ---
 if 'page' not in st.session_state:
@@ -212,24 +191,35 @@ if not paginated_results.empty:
         title = row.title if pd.notna(row.title) else "Untitled"
         venue = f"<i>{row.venue}</i>" if pd.notna(row.venue) and row.venue != "Not Provided" else ""
         
-        # 3. Handle the URL cleanly for HTML (Lighter blue for Dark Mode)
+        # 3. Handle the URL cleanly for HTML
         url_html = ""
         url = row.url if pd.notna(row.url) and row.url not in ["Not Provided", "N/A"] else ""
         if url:
             if url.startswith("http"): 
-                url_html = f'<div style="margin-top: 2px;"><a href="{url}" target="_blank" style="color: #4da6ff; text-decoration: none;">{url}</a></div>'
+                url_html = f'<div style="margin-top: 4px;"><a href="{url}" target="_blank" style="color: #0056b3; text-decoration: none;">{url}</a></div>'
             else: 
-                url_html = f'<div style="margin-top: 2px; color: #4da6ff;">{url}</div>'
+                url_html = f'<div style="margin-top: 4px; color: #0056b3;">{url}</div>'
+
+        # 4. Handle the Summary (Stitching Part 1 and Part 2 together)
+        s1 = row.summary_part1 if pd.notna(row.summary_part1) and row.summary_part1 != "Not Provided" else ""
+        s2 = row.summary_part2 if pd.notna(row.summary_part2) and row.summary_part2 != "Not Provided" else ""
+        full_summary = f"{s1} {s2}".strip()
+        
+        summary_html = ""
+        if full_summary:
+            # Injecting the text exactly as requested
+            summary_html = f'<div style="margin-top: 8px; font-size: 15px;"><strong>Short Summary &mdash;</strong> {full_summary}</div>'
                 
-        # 4. Clean Keywords
+        # 5. Clean Keywords
         keywords = row.keywords if pd.notna(row.keywords) and row.keywords != "Not Provided" else "None listed"
         
-        # 5. THE HTML TEMPLATE: No hardcoded text colors, letting Streamlit's native white text take over
+        # 6. THE HTML TEMPLATE (Now with a solid black separator and the summary included)
         result_html = (
-            f'<div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.2); font-family: sans-serif; line-height: 1.5;">'
+            f'<div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid black; font-family: sans-serif; line-height: 1.5;">'
             f'<div style="font-size: 16px;">{index}. {author}. {year_str}. {title}. {venue}.</div>'
             f'{url_html}'
-            f'<div style="margin-top: 6px; font-size: 14.5px; opacity: 0.7;"><strong>Keywords:</strong> {keywords}</div>'
+            f'{summary_html}'
+            f'<div style="margin-top: 8px; font-size: 14.5px;"><strong>Keywords:</strong> {keywords}</div>'
             f'</div>'
         )
         
