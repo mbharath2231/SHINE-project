@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import math
+import etl_engine
 
 st.set_page_config(page_title="SHINE Search Engine", layout="wide")
 
@@ -11,13 +12,18 @@ if 'page' not in st.session_state:
     st.session_state.page = 1
 
 # --- DATABASE CONNECTION ---
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_data():
+    print("Cache expired. Running automated ETL pipeline...")
+    try:
+        etl_engine.run_basic_etl()
+    except Exception as e:
+        print(f"ETL pipeline failed during auto-update: {e}")
     try:
         conn = sqlite3.connect("shine.db")
         query = """
             SELECT title, author, year, type, venue, url, 
-                   summary_part1, summary_part2, keywords 
+                   summary_part1, keywords 
             FROM resources
         """
         df = pd.read_sql(query, conn)
@@ -111,7 +117,7 @@ results = df_main.copy()
 
 # Apply Basic Search
 if basic_term:
-    text_cols = ['title', 'author', 'venue', 'summary_part1', 'summary_part2', 'keywords']
+    text_cols = ['title', 'author', 'venue', 'summary_part1', 'keywords']
     results['combined_text'] = results[text_cols].astype(str).agg(' '.join, axis=1)
     mask = apply_match(results, 'combined_text', basic_term, basic_match)
     results = results[mask].drop(columns=['combined_text'])
@@ -125,16 +131,14 @@ elif q1 or q2:
     if q1:
         if f1 == "Annotations":
             m_a = apply_match(results, 'summary_part1', q1, match1)
-            m_b = apply_match(results, 'summary_part2', q1, match1)
-            mask1 = m_a | m_b
+            mask1 = m_a
         else:
             mask1 = apply_match(results, map_field_to_col(f1), q1, match1)
             
     if q2:
         if f2 == "Annotations":
             m_a = apply_match(results, 'summary_part1', q2, match2)
-            m_b = apply_match(results, 'summary_part2', q2, match2)
-            mask2 = m_a | m_b
+            mask2 = m_a
         else:
             mask2 = apply_match(results, map_field_to_col(f2), q2, match2)
             
@@ -202,8 +206,7 @@ if not paginated_results.empty:
 
         # 4. Handle the Summary (Stitching Part 1 and Part 2 together)
         s1 = row.summary_part1 if pd.notna(row.summary_part1) and row.summary_part1 != "Not Provided" else ""
-        s2 = row.summary_part2 if pd.notna(row.summary_part2) and row.summary_part2 != "Not Provided" else ""
-        full_summary = f"{s1} {s2}".strip()
+        full_summary = f"{s1}".strip()
         
         summary_html = ""
         if full_summary:

@@ -3,8 +3,35 @@ import sqlite3
 import os
 
 PUBLIC_FILE = "Data/public.xlsx"
-HANNAH_FILE = "Data/hannah_intake.xlsx"
+HANNAH_FILE = "Data/hannah_file.xlsx"
 DB_NAME = "shine.db"
+
+def load_live_gsheet():
+    """Pulls live form submissions directly via Public CSV to bypass API auth."""
+    print("Fetching Live Google Sheet Data via Public CSV...")
+    try:
+        import pandas as pd
+        
+        # =========================================================
+        # PASTE YOUR "PUBLISH TO WEB" CSV LINK EXACTLY BETWEEN THE QUOTES
+        # =========================================================
+        PUBLIC_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6zPybtE8o-Wqp3lm0o7eVfgv542b9mZ3tlbyMbHV0Ub4tuMbbcegYnhwXaYwm1Mn1baVF3B7f6ctL/pub?output=csv" 
+        
+        # Pandas reads the live internet URL directly
+        df_live = pd.read_csv(PUBLIC_CSV_URL)
+        
+        # If the sheet only has headers, skip it
+        if df_live.empty:
+            print("Live sheet is empty.")
+            return pd.DataFrame()
+            
+        df_live['source_file'] = 'Live Google Form'
+        
+        return df_live
+
+    except Exception as e:
+        print(f"⚠️ Live CSV Fetch Error: {e}")
+        return pd.DataFrame()
 
 def load_messy_excel(filepath, sheet_name=None):
     """Dynamically finds the header row instead of guessing."""
@@ -48,6 +75,13 @@ def run_basic_etl():
         except Exception as e:
             print(f"      - Skipping {sheet}: {e}")
 
+    df_live = load_live_gsheet()
+    if not df_live.empty:
+        print("      - Successfully extracted Live Google Form data.")
+        all_dataframes.append(df_live)
+    else:
+        print("      - WARNING: Could not fetch Live Google Form data or it was empty.")        
+
     print("2. Standardising the Column Names...Schema Mapping")
     
     # Notice these keys are all completely LOWERCASE to prevent mismatch errors
@@ -59,7 +93,6 @@ def run_basic_etl():
         'publisher:': 'venue',
         'doi or url if possible': 'url',
         'this text is about:': 'summary_part1',
-        'the author(s) argue/report on:': 'summary_part2',
         'please check 3-5 key words': 'keywords'
     }
 
@@ -71,7 +104,6 @@ def run_basic_etl():
         'publisher:': 'venue',
         'doi or url (if possible - if not possible, put n/a):': 'url',
         'this text is about _.': 'summary_part1',
-        'the author(s) argue/report on _.': 'summary_part2',
         'please check 3-5 key words': 'keywords',
         'email address': 'submitter_email',
         'your first name:': 'submitter_fname',
@@ -119,15 +151,14 @@ def run_basic_etl():
     from datetime import datetime
     df_master['date_added'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    target_columns = ['title', 'author', 'year', 'type', 'venue', 'url', 'summary_part1', 'summary_part2', 'keywords', 'submitter_name', 'submitter_email', 'organization', 'source_file', 'date_added']
+    target_columns = ['title', 'author', 'year', 'type', 'venue', 'url', 'summary_part1', 'keywords', 'submitter_name', 'submitter_email', 'organization', 'source_file', 'date_added']
     
     for col in target_columns:
         if col not in df_master.columns:
             df_master[col] = "N/A"
     
     text_cols = [
-        'author', 'type', 'venue', 'url', 'summary_part1', 
-        'summary_part2', 'keywords', 'organization', 'submitter_email'
+        'author', 'type', 'venue', 'url', 'summary_part1', 'keywords', 'organization', 'submitter_email'
     ]
     for col in text_cols:
         # Fill actual nulls, and also replace empty strings
