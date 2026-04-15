@@ -67,6 +67,7 @@ def create_pdf_download(df):
     """Generates a formatted PDF from the search results."""
     from fpdf import FPDF
     import pandas as pd
+    import re
     
     pdf = FPDF()
     pdf.add_page()
@@ -88,12 +89,20 @@ def create_pdf_download(df):
         s1 = str(row['summary_part1']) if pd.notna(row['summary_part1']) and str(row['summary_part1']) != "Not Provided" else ""
         full_summary = f"{s1}".strip()
         
-        # 3. Build Strings
+        # 3. Sanitize Whitespace (THE FIX)
+        # Replaces non-breaking spaces (\xA0), newlines, and tabs with a standard breakable space
+        author = re.sub(r'\s+', ' ', author).strip()
+        title = re.sub(r'\s+', ' ', title).strip()
+        url = re.sub(r'\s+', ' ', url).strip()
+        full_summary = re.sub(r'\s+', ' ', full_summary).strip()
+        
+        # 4. Build Strings
         citation = f"{i}. {author} ({year}). {title}."
         
-        # 4. Encode to Latin-1 (Forces FPDF to ignore weird characters without crashing)
-        safe_citation = citation.encode('latin-1', 'ignore').decode('latin-1')
-        safe_url = url.encode('latin-1', 'ignore').decode('latin-1')
+        # 5. Encode to Latin-1 safely
+        # Using 'replace' prevents words from merging if an invalid character is stripped
+        safe_citation = citation.encode('latin-1', 'replace').decode('latin-1')
+        safe_url = url.encode('latin-1', 'replace').decode('latin-1')
         
         # Print Citation
         pdf.multi_cell(0, 6, txt=safe_citation)
@@ -106,9 +115,20 @@ def create_pdf_download(df):
             
         # Print Summary
         if full_summary:
-            safe_summary = f"Summary: {full_summary}".encode('latin-1', 'ignore').decode('latin-1')
-            pdf.set_font("helvetica", style="I", size=9.5) # Italicize summary slightly
+            safe_summary = f"Summary: {full_summary}".encode('latin-1', 'replace').decode('latin-1')
+            pdf.set_font("helvetica", style="I", size=9.5) 
             pdf.multi_cell(0, 5, txt=safe_summary)
+            
+        # 6. Horizontal Separator Line
+        pdf.ln(4) # Space below the text
+        
+        # Set line color to light gray
+        pdf.set_draw_color(180, 180, 180)
+        current_y = pdf.get_y()
+        
+        # Draw line (with a safety check to prevent drawing off the bottom edge of the page)
+        if current_y < 280:
+            pdf.line(pdf.l_margin, current_y, pdf.w - pdf.r_margin, current_y)
             
         pdf.ln(4) # Space between entries
         
