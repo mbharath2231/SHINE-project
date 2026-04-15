@@ -90,8 +90,7 @@ def create_pdf_download(df):
         url = str(row['url']) if pd.notna(row['url']) and str(row['url']) not in ["Not Provided", "N/A"] else ""
         
         s1 = str(row['summary_part1']) if pd.notna(row['summary_part1']) and str(row['summary_part1']) != "Not Provided" else ""
-        s2 = str(row['summary_part2']) if pd.notna(row['summary_part2']) and str(row['summary_part2']) != "Not Provided" else ""
-        full_summary = f"{s1} {s2}".strip()
+        full_summary = f"{s1}".strip()
         
         # 2. Sanitize Bad Whitespace
         author = re.sub(r'\s+', ' ', author).strip()
