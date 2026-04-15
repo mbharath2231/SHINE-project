@@ -66,13 +66,17 @@ def apply_match(df, col, term, match_type):
 def create_pdf_download(df):
     """Generates a formatted PDF from the search results."""
     from fpdf import FPDF
+    from fpdf.enums import XPos, YPos  # NEW: Required for modern FPDF2 syntax
     import pandas as pd
     import re
+    import textwrap  # NEW: The ultimate fix for the horizontal space crash
     
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", style="B", size=14)
-    pdf.cell(0, 10, "SHINE Database Search Results", ln=True, align="C")
+    
+    # FIX: Modern syntax to remove the "ln=True" deprecation warning
+    pdf.cell(0, 10, "SHINE Database Search Results", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
     pdf.ln(5)
     
     # Iterate through the dataframe
@@ -85,68 +89,54 @@ def create_pdf_download(df):
         title = str(row['title']) if pd.notna(row['title']) else "Untitled"
         url = str(row['url']) if pd.notna(row['url']) and str(row['url']) not in ["Not Provided", "N/A"] else ""
         
-        # 2. Extract and Clean Summary Data
         s1 = str(row['summary_part1']) if pd.notna(row['summary_part1']) and str(row['summary_part1']) != "Not Provided" else ""
-        full_summary = f"{s1}".strip()
+        s2 = str(row['summary_part2']) if pd.notna(row['summary_part2']) and str(row['summary_part2']) != "Not Provided" else ""
+        full_summary = f"{s1} {s2}".strip()
         
-        # 3. Sanitize Whitespace & Break Giant Strings (THE BULLETPROOF FIX)
-        # Fix A: Replace bad whitespace (newlines, tabs, non-breaking spaces) with standard spaces
+        # 2. Sanitize Bad Whitespace
         author = re.sub(r'\s+', ' ', author).strip()
         title = re.sub(r'\s+', ' ', title).strip()
         url = re.sub(r'\s+', ' ', url).strip()
         full_summary = re.sub(r'\s+', ' ', full_summary).strip()
         
-        # Fix B: Force a space into any unbroken string longer than 75 characters.
-        # This absolutely prevents FPDF from crashing when users paste massive URLs or garbage text.
-        author = re.sub(r'([^\s]{75})', r'\1 ', author)
-        title = re.sub(r'([^\s]{75})', r'\1 ', title)
-        url = re.sub(r'([^\s]{75})', r'\1 ', url)
-        full_summary = re.sub(r'([^\s]{75})', r'\1 ', full_summary)
+        # 3. Force-Wrap Giant Strings (THE BULLETPROOF FIX)
+        # This replaces FPDF's fragile word-breaking logic with Python's ironclad text wrapper.
+        # It guarantees NO string is ever wider than 90 characters, instantly preventing the crash.
+        author = textwrap.fill(author, width=90, break_long_words=True)
+        title = textwrap.fill(title, width=90, break_long_words=True)
+        url = textwrap.fill(url, width=90, break_long_words=True)
+        full_summary = textwrap.fill(full_summary, width=100, break_long_words=True)
         
         # 4. Build Strings
         citation = f"{i}. {author} ({year}). {title}."
         
-        # 5. Encode to Latin-1 safely
-        # Using 'replace' prevents words from merging if an invalid character is stripped
+        # 5. Encode safely to prevent weird characters from breaking FPDF
         safe_citation = citation.encode('latin-1', 'replace').decode('latin-1')
         safe_url = url.encode('latin-1', 'replace').decode('latin-1')
         
-        # Print Citation
-        pdf.multi_cell(0, 6, txt=safe_citation)
+        # FIX: Changed "txt=" to "text=" to remove the deprecation warning
+        pdf.multi_cell(0, 6, text=safe_citation)
         
-        # Print URL
         if safe_url:
-            pdf.set_text_color(0, 86, 179) # Blue link color
-            pdf.multi_cell(0, 6, txt=safe_url)
-            pdf.set_text_color(0, 0, 0) # Reset to black
+            pdf.set_text_color(0, 86, 179) 
+            pdf.multi_cell(0, 6, text=safe_url)
+            pdf.set_text_color(0, 0, 0) 
             
-        # Print Summary
         if full_summary:
             safe_summary = f"Summary: {full_summary}".encode('latin-1', 'replace').decode('latin-1')
             pdf.set_font("helvetica", style="I", size=9.5) 
-            pdf.multi_cell(0, 5, txt=safe_summary)
+            # FIX: Changed "txt=" to "text=" here as well
+            pdf.multi_cell(0, 5, text=safe_summary)
             
         # 6. Horizontal Separator Line
-        pdf.ln(4) # Space below the text
-        
-        # Set line color to light gray
+        pdf.ln(4) 
         pdf.set_draw_color(180, 180, 180)
         current_y = pdf.get_y()
         
-        # Draw line (with a safety check to prevent drawing off the bottom edge of the page)
         if current_y < 280:
             pdf.line(pdf.l_margin, current_y, pdf.w - pdf.r_margin, current_y)
-            
-        pdf.ln(4) # Space between entries
         
-        # Set line color to light gray (RGB: 180, 180, 180)
-        pdf.set_draw_color(180, 180, 180)
-        
-        # Draw line from Left Margin to Right Margin at current Y position
-        current_y = pdf.get_y()
-        pdf.line(pdf.l_margin, current_y, pdf.w - pdf.r_margin, current_y)
-        
-        pdf.ln(4) # Space above the next record
+        pdf.ln(4) 
         
     return pdf.output(dest="S").encode("latin-1")
 
