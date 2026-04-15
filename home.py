@@ -12,7 +12,7 @@ if 'page' not in st.session_state:
     st.session_state.page = 1
 
 # --- DATABASE CONNECTION ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=7200)
 def load_data():
     print("Cache expired. Running automated ETL pipeline...")
     try:
