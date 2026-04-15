@@ -3,6 +3,8 @@ import sqlite3
 import pandas as pd
 import math
 import etl_engine
+from fpdf import FPDF
+import io
 
 st.set_page_config(page_title="SHINE Search Engine", layout="wide")
 
@@ -60,6 +62,66 @@ def apply_match(df, col, term, match_type):
         return col_data.str.endswith(term, na=False)
     else: # Wildcard / Contains
         return col_data.str.contains(term, na=False)
+
+def create_pdf_download(df):
+    """Generates a formatted PDF from the search results."""
+    from fpdf import FPDF
+    import pandas as pd
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("helvetica", style="B", size=14)
+    pdf.cell(0, 10, "SHINE Database Search Results", ln=True, align="C")
+    pdf.ln(5)
+    
+    # Iterate through the dataframe
+    for i, (_, row) in enumerate(df.iterrows(), start=1):
+        pdf.set_font("helvetica", size=10) # Base font for citation
+        
+        # 1. Clean Citation Data
+        author = str(row['author']) if pd.notna(row['author']) else "Unknown Author"
+        year = str(row['year']) if pd.notna(row['year']) else "n.d."
+        title = str(row['title']) if pd.notna(row['title']) else "Untitled"
+        url = str(row['url']) if pd.notna(row['url']) and str(row['url']) not in ["Not Provided", "N/A"] else ""
+        
+        # 2. Extract and Clean Summary Data
+        s1 = str(row['summary_part1']) if pd.notna(row['summary_part1']) and str(row['summary_part1']) != "Not Provided" else ""
+        full_summary = f"{s1}".strip()
+        
+        # 3. Build Strings
+        citation = f"{i}. {author} ({year}). {title}."
+        
+        # 4. Encode to Latin-1 (Forces FPDF to ignore weird characters without crashing)
+        safe_citation = citation.encode('latin-1', 'ignore').decode('latin-1')
+        safe_url = url.encode('latin-1', 'ignore').decode('latin-1')
+        
+        # Print Citation
+        pdf.multi_cell(0, 6, txt=safe_citation)
+        
+        # Print URL
+        if safe_url:
+            pdf.set_text_color(0, 86, 179) # Blue link color
+            pdf.multi_cell(0, 6, txt=safe_url)
+            pdf.set_text_color(0, 0, 0) # Reset to black
+            
+        # Print Summary
+        if full_summary:
+            safe_summary = f"Summary: {full_summary}".encode('latin-1', 'ignore').decode('latin-1')
+            pdf.set_font("helvetica", style="I", size=9.5) # Italicize summary slightly
+            pdf.multi_cell(0, 5, txt=safe_summary)
+            
+        pdf.ln(4) # Space between entries
+        
+        # Set line color to light gray (RGB: 180, 180, 180)
+        pdf.set_draw_color(180, 180, 180)
+        
+        # Draw line from Left Margin to Right Margin at current Y position
+        current_y = pdf.get_y()
+        pdf.line(pdf.l_margin, current_y, pdf.w - pdf.r_margin, current_y)
+        
+        pdf.ln(4) # Space above the next record
+        
+    return pdf.output(dest="S").encode("latin-1")
 
 # --- UI: SEARCH FORMS ---
 st.title("Search SHINE Database")
@@ -175,11 +237,43 @@ start_idx = (st.session_state.page - 1) * results_per_page
 end_idx = start_idx + results_per_page
 paginated_results = results.iloc[start_idx:end_idx]
 
+col_title, col_spacer, col_dl1, col_dl2 = st.columns([4, 2, 2, 4], vertical_alignment="center")
 
-# --- DISPLAY FORMATTED RESULTS ---
-st.markdown(f"### Search Results")
-st.markdown(f"Your search found **{total_records}** citations. Showing page **{st.session_state.page}** of **{total_pages}**.")
-st.markdown("---")
+with col_title:
+    st.markdown("### Search Results")
+    st.markdown(f"Your search found **{total_records}** citations. Showing page **{st.session_state.page}** of **{total_pages}**.")
+
+# Only generate files and show buttons if there are results
+if total_records > 0:
+    import io
+    
+    # 1. Prepare Excel Data
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+        export_df = results.drop(columns=['venue'], errors='ignore')
+        export_df.to_excel(writer, index=False, sheet_name='Search Results')
+    
+    # 2. Prepare PDF Data
+    pdf_data = create_pdf_download(results)
+    
+    # 3. Render Buttons
+    with col_dl1:
+        st.download_button(
+            label="📊 Download Excel",
+            data=excel_buffer.getvalue(),
+            file_name="SHINE_Search_Results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=False
+        )
+
+    with col_dl2:
+        st.download_button(
+            label="📄 Download PDF",
+            data=pdf_data,
+            file_name="SHINE_Search_Results.pdf",
+            mime="application/pdf",
+            use_container_width=False
+        )
 
 if not paginated_results.empty:
     for index, row in enumerate(paginated_results.itertuples(), start=start_idx + 1):

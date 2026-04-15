@@ -1,2 +1,4 @@
 streamlit
 pandas
+xlsxwriter
+fpdf2
