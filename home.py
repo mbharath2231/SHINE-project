@@ -66,24 +66,20 @@ def apply_match(df, col, term, match_type):
 def create_pdf_download(df):
     """Generates a formatted PDF from the search results."""
     from fpdf import FPDF
-    from fpdf.enums import XPos, YPos  # NEW: Required for modern FPDF2 syntax
+    from fpdf.enums import XPos, YPos  
     import pandas as pd
     import re
-    import textwrap  # NEW: The ultimate fix for the horizontal space crash
     
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", style="B", size=14)
-    
-    # FIX: Modern syntax to remove the "ln=True" deprecation warning
     pdf.cell(0, 10, "SHINE Database Search Results", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
     pdf.ln(5)
     
-    # Iterate through the dataframe
     for i, (_, row) in enumerate(df.iterrows(), start=1):
-        pdf.set_font("helvetica", size=10) # Base font for citation
+        pdf.set_font("helvetica", size=10) 
         
-        # 1. Clean Citation Data
+        # 1. Clean Data
         author = str(row['author']) if pd.notna(row['author']) else "Unknown Author"
         year = str(row['year']) if pd.notna(row['year']) else "n.d."
         title = str(row['title']) if pd.notna(row['title']) else "Untitled"
@@ -98,36 +94,35 @@ def create_pdf_download(df):
         url = re.sub(r'\s+', ' ', url).strip()
         full_summary = re.sub(r'\s+', ' ', full_summary).strip()
         
-        # 3. Force-Wrap Giant Strings (THE BULLETPROOF FIX)
-        # This replaces FPDF's fragile word-breaking logic with Python's ironclad text wrapper.
-        # It guarantees NO string is ever wider than 90 characters, instantly preventing the crash.
-        author = textwrap.fill(author, width=90, break_long_words=True)
-        title = textwrap.fill(title, width=90, break_long_words=True)
-        url = textwrap.fill(url, width=90, break_long_words=True)
-        full_summary = textwrap.fill(full_summary, width=100, break_long_words=True)
+        # 3. MATHEMATICALLY SAFE CHUNKING (The Fix)
+        # 45 wide characters (like 'W') at size 10pt = ~7.4 inches wide.
+        # Page max width = 7.5 inches. This mathematically guarantees it will never crash.
+        author = re.sub(r'([^\s]{45})', r'\1 ', author)
+        title = re.sub(r'([^\s]{45})', r'\1 ', title)
+        url = re.sub(r'([^\s]{45})', r'\1 ', url)
+        full_summary = re.sub(r'([^\s]{45})', r'\1 ', full_summary)
         
         # 4. Build Strings
         citation = f"{i}. {author} ({year}). {title}."
         
-        # 5. Encode safely to prevent weird characters from breaking FPDF
+        # 5. Encode safely
         safe_citation = citation.encode('latin-1', 'replace').decode('latin-1')
         safe_url = url.encode('latin-1', 'replace').decode('latin-1')
         
-        # FIX: Changed "txt=" to "text=" to remove the deprecation warning
-        pdf.multi_cell(0, 6, text=safe_citation)
+        # 6. Explicitly set X and Y positions to prevent cursor rendering bugs
+        pdf.multi_cell(0, 6, text=safe_citation, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
         if safe_url:
             pdf.set_text_color(0, 86, 179) 
-            pdf.multi_cell(0, 6, text=safe_url)
+            pdf.multi_cell(0, 6, text=safe_url, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_text_color(0, 0, 0) 
             
         if full_summary:
             safe_summary = f"Summary: {full_summary}".encode('latin-1', 'replace').decode('latin-1')
             pdf.set_font("helvetica", style="I", size=9.5) 
-            # FIX: Changed "txt=" to "text=" here as well
-            pdf.multi_cell(0, 5, text=safe_summary)
+            pdf.multi_cell(0, 5, text=safe_summary, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
-        # 6. Horizontal Separator Line
+        # 7. Horizontal Separator Line
         pdf.ln(4) 
         pdf.set_draw_color(180, 180, 180)
         current_y = pdf.get_y()
@@ -137,7 +132,7 @@ def create_pdf_download(df):
         
         pdf.ln(4) 
         
-    return pdf.output(dest="S").encode("latin-1")
+    return bytes(pdf.output())
 
 # --- UI: SEARCH FORMS ---
 st.title("Search SHINE Database")
