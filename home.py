@@ -89,12 +89,19 @@ def create_pdf_download(df):
         s1 = str(row['summary_part1']) if pd.notna(row['summary_part1']) and str(row['summary_part1']) != "Not Provided" else ""
         full_summary = f"{s1}".strip()
         
-        # 3. Sanitize Whitespace (THE FIX)
-        # Replaces non-breaking spaces (\xA0), newlines, and tabs with a standard breakable space
+        # 3. Sanitize Whitespace & Break Giant Strings (THE BULLETPROOF FIX)
+        # Fix A: Replace bad whitespace (newlines, tabs, non-breaking spaces) with standard spaces
         author = re.sub(r'\s+', ' ', author).strip()
         title = re.sub(r'\s+', ' ', title).strip()
         url = re.sub(r'\s+', ' ', url).strip()
         full_summary = re.sub(r'\s+', ' ', full_summary).strip()
+        
+        # Fix B: Force a space into any unbroken string longer than 75 characters.
+        # This absolutely prevents FPDF from crashing when users paste massive URLs or garbage text.
+        author = re.sub(r'([^\s]{75})', r'\1 ', author)
+        title = re.sub(r'([^\s]{75})', r'\1 ', title)
+        url = re.sub(r'([^\s]{75})', r'\1 ', url)
+        full_summary = re.sub(r'([^\s]{75})', r'\1 ', full_summary)
         
         # 4. Build Strings
         citation = f"{i}. {author} ({year}). {title}."
